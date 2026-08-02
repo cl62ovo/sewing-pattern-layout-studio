@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   Box,
   Check,
+  ChevronLeft,
   ChevronRight,
   Download,
   LoaderCircle,
@@ -252,6 +253,15 @@ function CreateProjectForm({ busy, onSubmit }: {
   )
 }
 
+const pipelineStages = ['Specification', '3D model', 'Normalize', 'Segment', 'Flatten', 'Score', 'PDF']
+
+function defaultStepFor(status: string, supported: boolean) {
+  if (!supported) return 0
+  if (status === 'model_review') return 2
+  if (status === 'failed' || status === 'generating_model') return 1
+  return 0
+}
+
 function ProjectWorkspace({ project, capabilities, busy, onGenerate, onResume }: {
   project: ProjectDetail
   capabilities: Capabilities | null
@@ -265,6 +275,13 @@ function ProjectWorkspace({ project, capabilities, busy, onGenerate, onResume }:
   const normalizedModel = version.assets.find((asset) => asset.kind === 'normalized_glb')
   const report = version.assets.find((asset) => asset.kind === 'normalization_report')
   const isGenerating = job && ['queued', 'running'].includes(job.state)
+  const completeThrough = version.status === 'model_review' ? 2 : version.status === 'generating_model' ? 0 : 0
+  const lastStepIndex = pipelineStages.length - 1
+
+  const [step, setStep] = useState(() => defaultStepFor(version.status, specification.supported))
+  useEffect(() => {
+    setStep(defaultStepFor(version.status, specification.supported))
+  }, [project.id, version.status, specification.supported])
 
   return (
     <div className="project-workspace">
@@ -273,22 +290,7 @@ function ProjectWorkspace({ project, capabilities, busy, onGenerate, onResume }:
         <span className={`project-status ${version.status}`}>{statusLabels[version.status] || version.status}</span>
       </header>
 
-      {version.status === 'model_review' && normalizedModel ? (
-        <section className="model-review" aria-labelledby="model-review-heading">
-          <div className="model-review-copy">
-            <p className="section-index">01 / MODEL REVIEW</p>
-            <h2 id="model-review-heading">Normalized geometry</h2>
-            <p>Drag to inspect the generated shape. This model has passed the current closed-mesh and winding checks.</p>
-            <div className="asset-actions">
-              <a href={normalizedModel.url} download><Download size={16} />Normalized GLB</a>
-              {report && <a href={report.url} download><Download size={16} />Diagnostic JSON</a>}
-            </div>
-          </div>
-          <Suspense fallback={<div className="model-loading">Loading 3D model</div>}>
-            <ModelViewer url={normalizedModel.url} />
-          </Suspense>
-        </section>
-      ) : (
+      {step === 0 && (
         <section className="specification-review" aria-labelledby="specification-heading">
           <div className="spec-summary">
             <p className="section-index">01 / VALIDATED SPECIFICATION</p>
@@ -305,14 +307,20 @@ function ProjectWorkspace({ project, capabilities, busy, onGenerate, onResume }:
         </section>
       )}
 
-      {!specification.supported ? (
+      {step === 0 && !specification.supported && (
         <div className="scope-block"><AlertTriangle size={20} /><div><strong>Outside the supported MVP scope</strong><p>{specification.reasonCodes.join(', ')}</p></div></div>
-      ) : isGenerating ? (
+      )}
+
+      {step === 1 && !specification.supported && (
+        <div className="step-locked"><AlertTriangle size={20} /><div><strong>Specification isn't supported yet</strong><p>Update the description on the specification step before generating a model.</p></div></div>
+      )}
+      {step === 1 && specification.supported && isGenerating && (
         <section className="generation-progress" aria-live="polite">
           <div><LoaderCircle className="spin" size={20} /><span><strong>{job.stage === 'queued' ? 'Waiting for worker' : 'Meshy is generating the model'}</strong><small>{job.progress}% complete</small></span></div>
           <progress max="100" value={job.progress} />
         </section>
-      ) : version.status === 'draft' ? (
+      )}
+      {step === 1 && specification.supported && !isGenerating && version.status === 'draft' && (
         <section className="generation-command">
           <div><p className="section-index">02 / 3D GENERATION</p><h2>Generate one geometry candidate</h2><p>Meshy preview creates an untextured GLB for deterministic mesh checks.</p></div>
           <button className="primary-command" type="button" disabled={busy || !capabilities?.meshy || (capabilities.meshyBalance ?? 0) < 20} onClick={() => void onGenerate()}>
@@ -320,7 +328,8 @@ function ProjectWorkspace({ project, capabilities, busy, onGenerate, onResume }:
             Generate model · about 20 credits
           </button>
         </section>
-      ) : version.status === 'failed' ? (
+      )}
+      {step === 1 && version.status === 'failed' && (
         <div className="scope-block">
           <AlertTriangle size={20} />
           <div className="failure-copy">
@@ -335,15 +344,60 @@ function ProjectWorkspace({ project, capabilities, busy, onGenerate, onResume }:
             )}
           </div>
         </div>
+      )}
+      {step === 1 && version.status === 'model_review' && (
+        <div className="step-locked"><Check size={20} /><div><strong>3D model generated</strong><p>The raw geometry passed generation. Go to the next step to review the normalized mesh.</p></div></div>
+      )}
+
+      {step === 2 && version.status === 'model_review' && normalizedModel ? (
+        <section className="model-review" aria-labelledby="model-review-heading">
+          <div className="model-review-copy">
+            <p className="section-index">03 / MODEL REVIEW</p>
+            <h2 id="model-review-heading">Normalized geometry</h2>
+            <p>Drag to inspect the generated shape. This model has passed the current closed-mesh and winding checks.</p>
+            <div className="asset-actions">
+              <a href={normalizedModel.url} download><Download size={16} />Normalized GLB</a>
+              {report && <a href={report.url} download><Download size={16} />Diagnostic JSON</a>}
+            </div>
+          </div>
+          <Suspense fallback={<div className="model-loading">Loading 3D model</div>}>
+            <ModelViewer url={normalizedModel.url} />
+          </Suspense>
+        </section>
+      ) : step === 2 ? (
+        <div className="step-locked"><AlertTriangle size={20} /><div><strong>Not reached yet</strong><p>Complete the 3D model generation step first.</p></div></div>
       ) : null}
 
+      {step >= 3 && (
+        <div className="step-locked"><AlertTriangle size={20} /><div><strong>{pipelineStages[step]} isn't implemented yet</strong><p>This step is planned but not available in the current MVP.</p></div></div>
+      )}
+
       <section className="pipeline-state" aria-label="Pattern pipeline state">
-        {['Specification', '3D model', 'Normalize', 'Segment', 'Flatten', 'Score', 'PDF'].map((stage, index) => {
-          const completeThrough = version.status === 'model_review' ? 2 : version.status === 'generating_model' ? 0 : 0
+        {pipelineStages.map((stage, index) => {
           const state = index <= completeThrough ? 'complete' : index === completeThrough + 1 ? 'current' : 'future'
-          return <span className={state} key={stage}>{state === 'complete' ? <Check size={14} /> : <i />}{stage}</span>
+          return (
+            <button
+              type="button"
+              className={`${state}${index === step ? ' viewing' : ''}`}
+              key={stage}
+              onClick={() => setStep(index)}
+              aria-current={index === step ? 'step' : undefined}
+            >
+              {state === 'complete' ? <Check size={14} /> : <i />}{stage}
+            </button>
+          )
         })}
       </section>
+
+      <div className="step-nav">
+        <button type="button" onClick={() => setStep((current) => Math.max(0, current - 1))} disabled={step === 0}>
+          <ChevronLeft size={16} />Previous step
+        </button>
+        <span>{step + 1} / {pipelineStages.length} · {pipelineStages[step]}</span>
+        <button type="button" onClick={() => setStep((current) => Math.min(lastStepIndex, current + 1))} disabled={step === lastStepIndex}>
+          Next step<ChevronRight size={16} />
+        </button>
+      </div>
     </div>
   )
 }
