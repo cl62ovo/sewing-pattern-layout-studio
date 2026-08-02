@@ -17,3 +17,7 @@ class CreateProjectRequest(ApiModel):
 
 class CreateModelJobRequest(ApiModel):
     idempotencyKey: str = Field(min_length=8, max_length=100)
+
+
+class CreatePatternJobRequest(ApiModel):
+    idempotencyKey: str = Field(min_length=8, max_length=100)

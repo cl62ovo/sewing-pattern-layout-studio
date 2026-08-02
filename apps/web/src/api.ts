@@ -2,6 +2,8 @@ import type {
   Capabilities,
   CreateProjectInput,
   ModelJob,
+  PatternQuality,
+  PatternReport,
   ProjectDetail,
   ProjectSummary,
 } from './types'
@@ -39,4 +41,10 @@ export const api = {
   resumeModelJob: (id: string) => request<ModelJob>(`/api/jobs/${id}/resume`, {
     method: 'POST',
   }),
+  acceptModel: (versionId: string) => request<ModelJob>(`/api/versions/${versionId}/accept-model`, {
+    method: 'POST',
+    body: JSON.stringify({ idempotencyKey: crypto.randomUUID() }),
+  }),
+  pattern: (versionId: string) => request<PatternReport>(`/api/versions/${versionId}/pattern`),
+  qualityReport: (versionId: string) => request<PatternQuality>(`/api/versions/${versionId}/quality-report`),
 }

@@ -48,7 +48,7 @@ def test_non_closed_glb_is_reconstructed_as_closed_manifold(tmp_path: Path) -> N
     assert report.diagnostics.non_manifold_edge_count == 0
     assert report.diagnostics.is_watertight is True
     assert report.repair_method == "voxel_reconstruction"
-    assert report.voxel_resolution == 192
+    assert report.voxel_resolution == 64
     assert report.stages[0].status == StageStatus.COMPLETED
     assert normalized.is_file()
 

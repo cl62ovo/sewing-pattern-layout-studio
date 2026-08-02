@@ -39,6 +39,39 @@ export type ModelJob = {
   errorCode: string | null
   errorMessage: string | null
   providerStatus: string | null
+  kind?: 'generate_model' | 'build_pattern'
+  patternPassed?: boolean | null
+}
+
+export type PatternQuality = {
+  pieceCount: number
+  meanDistortion: number
+  maxDistortion: number
+  maxSeamMismatch: number
+  flippedTriangleCount: number
+  boundarySelfIntersectionCount: number
+  unpairedSeamCount: number
+  passed: boolean
+  failureReasons: string[]
+}
+
+export type PatternReport = {
+  schemaVersion: 1
+  algorithmVersion: 'pattern-v3'
+  units: 'mm'
+  sourceSha256: string
+  targetHeightMm: number
+  seamAllowanceMm: number
+  pieces: Array<{
+    id: string
+    name: string
+    quantity: number
+    seamPathMm: Array<[number, number]>
+    cutPathMm: Array<[number, number]>
+  }>
+  quality: PatternQuality
+  svgFileName: string | null
+  pdfFileName: string | null
 }
 
 export type PlushSpecification = {

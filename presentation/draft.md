@@ -14,11 +14,23 @@
 > - **Low Success Rate:** High initial frustration prevents beginners from experiencing the joy and accomplishment of handmade creation.
 
 ## A working prototype
-    前后端分离
+    前后端分离展示
+    api doc
 ## How you build it
-    first version: vibe coding react项目
+
+
+    first version: vibe coding react项目 with codex.
+
+    1st-2nd ver workflow: 先确定需求（对话问答）![alt text](image.png)，落实为文档![alt text](image-1.png)，然后vibe coding制作 MVP， 迭代
+
     second version：加入后端 
+    其他使用的工具也要加上一些。
+    meshy api
+    openrouter api(如果用到了)
+    技术栈
+    其他工具和实现方式。
 
 ## What can be improved?
     纸张尺寸填入比较复杂，有预设更好
     页面冗长，用户交互体验差
+    其他todo以及问题

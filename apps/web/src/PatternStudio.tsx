@@ -12,7 +12,7 @@ import {
 } from 'lucide-react'
 
 import { api } from './api'
-import type { Capabilities, CreateProjectInput, ProjectDetail, ProjectSummary } from './types'
+import type { Capabilities, CreateProjectInput, PatternReport, ProjectDetail, ProjectSummary } from './types'
 
 const ModelViewer = lazy(() => import('./ModelViewer').then((module) => ({ default: module.ModelViewer })))
 
@@ -28,6 +28,12 @@ const statusLabels: Record<string, string> = {
   draft: 'Specification ready',
   generating_model: 'Generating model',
   model_review: 'Model ready',
+  segmenting: 'Building pattern',
+  flattening: 'Flattening pieces',
+  validating: 'Checking quality',
+  rendering: 'Rendering exports',
+  pattern_review: 'Review pattern',
+  ready: 'Pattern ready',
   failed: 'Needs attention',
 }
 
@@ -155,6 +161,24 @@ export function PatternStudio() {
     }
   }
 
+  async function acceptModel() {
+    if (!selected) return
+    setLoading(true)
+    setError('')
+    try {
+      const job = await api.acceptModel(selected.version.id)
+      setSelected({
+        ...selected,
+        version: { ...selected.version, status: 'segmenting', latestJob: job },
+      })
+      await refreshProjects()
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Pattern task could not be created.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   return (
     <div className="pattern-workspace">
       <aside className="project-rail">
@@ -194,6 +218,7 @@ export function PatternStudio() {
             busy={loading}
             onGenerate={generateModel}
             onResume={resumeModel}
+            onAccept={acceptModel}
           />
         ) : loading ? (
           <div className="workspace-loading"><LoaderCircle size={24} />Loading workspace</div>
@@ -220,24 +245,24 @@ function CreateProjectForm({ busy, onSubmit }: {
       <form onSubmit={(event) => { event.preventDefault(); void onSubmit(form) }}>
         <label>
           <span>Project name</span>
-          <input required maxLength={120} value={form.name} placeholder="Cloud rabbit" onChange={(event) => setForm({ ...form, name: event.target.value })} />
+          <input name="projectName" required maxLength={120} value={form.name} placeholder="Cloud rabbit" onChange={(event) => setForm({ ...form, name: event.target.value })} />
         </label>
         <label className="description-field">
           <span>Plush description</span>
-          <textarea required minLength={3} maxLength={1200} rows={7} value={form.description} placeholder="A sleepy rounded cloud plush with two long rabbit ears and embroidered eyes" onChange={(event) => setForm({ ...form, description: event.target.value })} />
+          <textarea name="description" required minLength={3} maxLength={1200} rows={7} value={form.description} placeholder="A sleepy rounded cloud plush with two long rabbit ears and embroidered eyes" onChange={(event) => setForm({ ...form, description: event.target.value })} />
         </label>
         <div className="form-row">
           <label>
             <span>Finished height</span>
-            <div className="unit-input"><input type="number" min="50" max="2000" value={form.heightMm} onChange={(event) => setForm({ ...form, heightMm: Number(event.target.value) })} /><b>mm</b></div>
+            <div className="unit-input"><input name="heightMm" type="number" min="50" max="2000" value={form.heightMm} onChange={(event) => setForm({ ...form, heightMm: Number(event.target.value) })} /><b>mm</b></div>
           </label>
           <label>
             <span>Seam allowance</span>
-            <div className="unit-input"><input type="number" min="0" max="50" step="0.5" value={form.seamAllowanceMm} onChange={(event) => setForm({ ...form, seamAllowanceMm: Number(event.target.value) })} /><b>mm</b></div>
+            <div className="unit-input"><input name="seamAllowanceMm" type="number" min="0" max="50" step="0.5" value={form.seamAllowanceMm} onChange={(event) => setForm({ ...form, seamAllowanceMm: Number(event.target.value) })} /><b>mm</b></div>
           </label>
           <label>
             <span>Response language</span>
-            <select value={form.locale} onChange={(event) => setForm({ ...form, locale: event.target.value as 'en' | 'zh-CN' })}>
+            <select name="locale" value={form.locale} onChange={(event) => setForm({ ...form, locale: event.target.value as 'en' | 'zh-CN' })}>
               <option value="en">English</option>
               <option value="zh-CN">简体中文</option>
             </select>
@@ -258,30 +283,63 @@ const pipelineStages = ['Specification', '3D model', 'Normalize', 'Segment', 'Fl
 function defaultStepFor(status: string, supported: boolean) {
   if (!supported) return 0
   if (status === 'model_review') return 2
+  if (['segmenting', 'flattening'].includes(status)) return 3
+  if (['validating', 'pattern_review'].includes(status)) return 5
+  if (status === 'rendering' || status === 'ready') return 6
   if (status === 'failed' || status === 'generating_model') return 1
   return 0
 }
 
-function ProjectWorkspace({ project, capabilities, busy, onGenerate, onResume }: {
+function ProjectWorkspace({ project, capabilities, busy, onGenerate, onResume, onAccept }: {
   project: ProjectDetail
   capabilities: Capabilities | null
   busy: boolean
   onGenerate: () => Promise<void>
   onResume: () => Promise<void>
+  onAccept: () => Promise<void>
 }) {
   const { version } = project
   const specification = version.specification
   const job = version.latestJob
   const normalizedModel = version.assets.find((asset) => asset.kind === 'normalized_glb')
   const report = version.assets.find((asset) => asset.kind === 'normalization_report')
-  const isGenerating = job && ['queued', 'running'].includes(job.state)
-  const completeThrough = version.status === 'model_review' ? 2 : version.status === 'generating_model' ? 0 : 0
+  const patternSvg = version.assets.find((asset) => asset.kind === 'pattern_svg')
+  const patternPdf = version.assets.find((asset) => asset.kind === 'pattern_pdf')
+  const patternReportAsset = version.assets.find((asset) => asset.kind === 'pattern_report')
+  const isBusyJob = Boolean(job && ['queued', 'running'].includes(job.state))
+  const isGenerating = isBusyJob && job?.kind !== 'build_pattern'
+  const isBuildingPattern = isBusyJob && job?.kind === 'build_pattern'
+  const completeThrough = version.status === 'ready'
+    ? 6
+    : version.status === 'pattern_review'
+      ? 5
+      : version.status === 'model_review'
+        ? 2
+        : version.status === 'segmenting'
+          ? 2
+          : version.status === 'generating_model'
+            ? 0
+            : 0
   const lastStepIndex = pipelineStages.length - 1
 
   const [step, setStep] = useState(() => defaultStepFor(version.status, specification.supported))
+  const [pattern, setPattern] = useState<PatternReport | null>(null)
+  const [patternError, setPatternError] = useState('')
   useEffect(() => {
     setStep(defaultStepFor(version.status, specification.supported))
   }, [project.id, version.status, specification.supported])
+  useEffect(() => {
+    let active = true
+    setPattern(null)
+    setPatternError('')
+    if (!patternReportAsset) return () => { active = false }
+    api.pattern(version.id)
+      .then((result) => { if (active) setPattern(result) })
+      .catch((reason: unknown) => {
+        if (active) setPatternError(reason instanceof Error ? reason.message : 'Pattern report could not be loaded.')
+      })
+    return () => { active = false }
+  }, [version.id, patternReportAsset?.id])
 
   return (
     <div className="project-workspace">
@@ -314,7 +372,7 @@ function ProjectWorkspace({ project, capabilities, busy, onGenerate, onResume }:
       {step === 1 && !specification.supported && (
         <div className="step-locked"><AlertTriangle size={20} /><div><strong>Specification isn't supported yet</strong><p>Update the description on the specification step before generating a model.</p></div></div>
       )}
-      {step === 1 && specification.supported && isGenerating && (
+      {step === 1 && specification.supported && isGenerating && job && (
         <section className="generation-progress" aria-live="polite">
           <div><LoaderCircle className="spin" size={20} /><span><strong>{job.stage === 'queued' ? 'Waiting for worker' : 'Meshy is generating the model'}</strong><small>{job.progress}% complete</small></span></div>
           <progress max="100" value={job.progress} />
@@ -349,7 +407,7 @@ function ProjectWorkspace({ project, capabilities, busy, onGenerate, onResume }:
         <div className="step-locked"><Check size={20} /><div><strong>3D model generated</strong><p>The raw geometry passed generation. Go to the next step to review the normalized mesh.</p></div></div>
       )}
 
-      {step === 2 && version.status === 'model_review' && normalizedModel ? (
+      {step === 2 && normalizedModel ? (
         <section className="model-review" aria-labelledby="model-review-heading">
           <div className="model-review-copy">
             <p className="section-index">03 / MODEL REVIEW</p>
@@ -359,6 +417,12 @@ function ProjectWorkspace({ project, capabilities, busy, onGenerate, onResume }:
               <a href={normalizedModel.url} download><Download size={16} />Normalized GLB</a>
               {report && <a href={report.url} download><Download size={16} />Diagnostic JSON</a>}
             </div>
+            {version.status === 'model_review' && (
+              <button className="primary-command accept-model" type="button" disabled={busy} onClick={() => void onAccept()}>
+                {busy ? <LoaderCircle className="spin" size={18} /> : <Check size={18} />}
+                Accept model & build pattern
+              </button>
+            )}
           </div>
           <Suspense fallback={<div className="model-loading">Loading 3D model</div>}>
             <ModelViewer url={normalizedModel.url} />
@@ -368,8 +432,47 @@ function ProjectWorkspace({ project, capabilities, busy, onGenerate, onResume }:
         <div className="step-locked"><AlertTriangle size={20} /><div><strong>Not reached yet</strong><p>Complete the 3D model generation step first.</p></div></div>
       ) : null}
 
-      {step >= 3 && (
-        <div className="step-locked"><AlertTriangle size={20} /><div><strong>{pipelineStages[step]} isn't implemented yet</strong><p>This step is planned but not available in the current MVP.</p></div></div>
+      {step >= 3 && isBuildingPattern && (
+        <section className="generation-progress" aria-live="polite">
+          <div><LoaderCircle className="spin" size={20} /><span><strong>Building the sewing pattern</strong><small>{job?.stage.replace('_', ' ')} · deterministic geometry worker</small></span></div>
+          <progress max="100" value={job?.progress || 0} />
+        </section>
+      )}
+
+      {step >= 3 && !isBuildingPattern && pattern && patternSvg && (
+        <section className="pattern-result" aria-labelledby="pattern-result-heading">
+          <div className="pattern-result-copy">
+            <p className="section-index">{String(step + 1).padStart(2, '0')} / {pipelineStages[step].toUpperCase()}</p>
+            <h2 id="pattern-result-heading">{pattern.quality.passed ? 'Pattern passed digital checks' : 'Pattern needs geometry review'}</h2>
+            <p>Experimental output from {pattern.algorithmVersion}. Dimensions and paths are stored in millimeters.</p>
+            <dl className="quality-metrics">
+              <div><dt>Pieces</dt><dd>{pattern.quality.pieceCount} / 12</dd></div>
+              <div><dt>Mean distortion</dt><dd className={pattern.quality.meanDistortion <= 0.03 ? 'pass' : 'fail'}>{(pattern.quality.meanDistortion * 100).toFixed(2)}%</dd></div>
+              <div><dt>Max local distortion</dt><dd>{(pattern.quality.maxDistortion * 100).toFixed(2)}%</dd></div>
+              <div><dt>Seam mismatch</dt><dd className={pattern.quality.maxSeamMismatch <= 0.005 ? 'pass' : 'fail'}>{(pattern.quality.maxSeamMismatch * 100).toFixed(2)}%</dd></div>
+              <div><dt>Flipped triangles</dt><dd className={pattern.quality.flippedTriangleCount === 0 ? 'pass' : 'fail'}>{pattern.quality.flippedTriangleCount}</dd></div>
+              <div><dt>Unpaired seams</dt><dd className={pattern.quality.unpairedSeamCount === 0 ? 'pass' : 'fail'}>{pattern.quality.unpairedSeamCount}</dd></div>
+            </dl>
+            {pattern.quality.failureReasons.length > 0 && (
+              <div className="quality-failures"><AlertTriangle size={17} /><div><strong>Formal PDF export is blocked</strong><p>{pattern.quality.failureReasons.join(' · ')}</p></div></div>
+            )}
+            <div className="asset-actions">
+              <a href={patternSvg.url} download><Download size={16} />{pattern.quality.passed ? 'Pattern SVG' : 'Diagnostic SVG'}</a>
+              {patternPdf && <a className="primary-download" href={patternPdf.url} download><Download size={16} />1:1 A4 PDF</a>}
+              {patternReportAsset && <a href={patternReportAsset.url} download><Download size={16} />Quality JSON</a>}
+            </div>
+            <p className="experimental-note">Experimental pattern. Digital geometry checks do not guarantee physical sewability.</p>
+          </div>
+          <div className="pattern-preview"><img src={patternSvg.url} alt="Generated two-dimensional sewing pattern pieces" /></div>
+        </section>
+      )}
+
+      {step >= 3 && !isBuildingPattern && patternError && (
+        <div className="scope-block"><AlertTriangle size={20} /><div><strong>Pattern report unavailable</strong><p>{patternError}</p></div></div>
+      )}
+
+      {step >= 3 && !isBuildingPattern && !pattern && !patternError && (
+        <div className="step-locked"><AlertTriangle size={20} /><div><strong>Pattern has not been built</strong><p>Accept the normalized model before opening this stage.</p></div></div>
       )}
 
       <section className="pipeline-state" aria-label="Pattern pipeline state">

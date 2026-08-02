@@ -1,0 +1,411 @@
+{
+  "$defs": {
+    "ErrorCode": {
+      "enum": [
+        "PROVIDER_ASSET_INVALID",
+        "MESH_NOT_CLOSED",
+        "MESH_NON_MANIFOLD",
+        "MESH_REPAIR_FAILED",
+        "SEGMENTATION_NO_VALID_CUT",
+        "FLATTENING_FLIPPED_TRIANGLES",
+        "FLATTENING_DISTORTION_TOO_HIGH",
+        "SEAM_LENGTH_MISMATCH",
+        "SEAM_ALLOWANCE_OFFSET_FAILED",
+        "PDF_VALIDATION_FAILED",
+        "NOT_IMPLEMENTED"
+      ],
+      "title": "ErrorCode",
+      "type": "string"
+    },
+    "PatternPiece": {
+      "additionalProperties": false,
+      "properties": {
+        "cutPathMm": {
+          "items": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "type": "array"
+          },
+          "title": "Cutpathmm",
+          "type": "array"
+        },
+        "faces": {
+          "items": {
+            "maxItems": 3,
+            "minItems": 3,
+            "prefixItems": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "type": "array"
+          },
+          "title": "Faces",
+          "type": "array"
+        },
+        "grainDirection": {
+          "default": [
+            0.0,
+            1.0
+          ],
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Graindirection",
+          "type": "array"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "mirrorOf": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Mirrorof"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "quantity": {
+          "default": 1,
+          "minimum": 1,
+          "title": "Quantity",
+          "type": "integer"
+        },
+        "seamEdges": {
+          "items": {
+            "$ref": "#/$defs/SeamEdge"
+          },
+          "title": "Seamedges",
+          "type": "array"
+        },
+        "seamPathMm": {
+          "items": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "type": "array"
+          },
+          "title": "Seampathmm",
+          "type": "array"
+        },
+        "sourceVertexIds": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Sourcevertexids",
+          "type": "array"
+        },
+        "vertices2dMm": {
+          "items": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "type": "array"
+          },
+          "title": "Vertices2Dmm",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "sourceVertexIds",
+        "faces",
+        "vertices2dMm",
+        "seamPathMm",
+        "cutPathMm",
+        "seamEdges"
+      ],
+      "title": "PatternPiece",
+      "type": "object"
+    },
+    "PatternQuality": {
+      "additionalProperties": false,
+      "properties": {
+        "boundarySelfIntersectionCount": {
+          "minimum": 0,
+          "title": "Boundaryselfintersectioncount",
+          "type": "integer"
+        },
+        "failureReasons": {
+          "items": {
+            "$ref": "#/$defs/ErrorCode"
+          },
+          "title": "Failurereasons",
+          "type": "array"
+        },
+        "flippedTriangleCount": {
+          "minimum": 0,
+          "title": "Flippedtrianglecount",
+          "type": "integer"
+        },
+        "maxDistortion": {
+          "minimum": 0,
+          "title": "Maxdistortion",
+          "type": "number"
+        },
+        "maxSeamMismatch": {
+          "minimum": 0,
+          "title": "Maxseammismatch",
+          "type": "number"
+        },
+        "meanDistortion": {
+          "minimum": 0,
+          "title": "Meandistortion",
+          "type": "number"
+        },
+        "passed": {
+          "title": "Passed",
+          "type": "boolean"
+        },
+        "pieceCount": {
+          "minimum": 0,
+          "title": "Piececount",
+          "type": "integer"
+        },
+        "unpairedSeamCount": {
+          "minimum": 0,
+          "title": "Unpairedseamcount",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "pieceCount",
+        "meanDistortion",
+        "maxDistortion",
+        "maxSeamMismatch",
+        "flippedTriangleCount",
+        "boundarySelfIntersectionCount",
+        "unpairedSeamCount",
+        "passed",
+        "failureReasons"
+      ],
+      "title": "PatternQuality",
+      "type": "object"
+    },
+    "PipelineStage": {
+      "enum": [
+        "normalize",
+        "segment",
+        "flatten",
+        "score",
+        "pdf"
+      ],
+      "title": "PipelineStage",
+      "type": "string"
+    },
+    "SeamEdge": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "length2dMm": {
+          "minimum": 0,
+          "title": "Length2Dmm",
+          "type": "number"
+        },
+        "length3dMm": {
+          "minimum": 0,
+          "title": "Length3Dmm",
+          "type": "number"
+        },
+        "pairId": {
+          "title": "Pairid",
+          "type": "string"
+        },
+        "sourceVertices": {
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "integer"
+            }
+          ],
+          "title": "Sourcevertices",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "pairId",
+        "sourceVertices",
+        "length3dMm",
+        "length2dMm"
+      ],
+      "title": "SeamEdge",
+      "type": "object"
+    },
+    "StageReport": {
+      "additionalProperties": false,
+      "properties": {
+        "errorCode": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ErrorCode"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "stage": {
+          "$ref": "#/$defs/PipelineStage"
+        },
+        "status": {
+          "$ref": "#/$defs/StageStatus"
+        }
+      },
+      "required": [
+        "stage",
+        "status"
+      ],
+      "title": "StageReport",
+      "type": "object"
+    },
+    "StageStatus": {
+      "enum": [
+        "completed",
+        "failed",
+        "not_implemented"
+      ],
+      "title": "StageStatus",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "algorithmVersion": {
+      "const": "pattern-v3",
+      "default": "pattern-v3",
+      "title": "Algorithmversion",
+      "type": "string"
+    },
+    "pdfFileName": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Pdffilename"
+    },
+    "pieces": {
+      "items": {
+        "$ref": "#/$defs/PatternPiece"
+      },
+      "title": "Pieces",
+      "type": "array"
+    },
+    "quality": {
+      "$ref": "#/$defs/PatternQuality"
+    },
+    "schemaVersion": {
+      "const": 1,
+      "default": 1,
+      "title": "Schemaversion",
+      "type": "integer"
+    },
+    "seamAllowanceMm": {
+      "minimum": 0,
+      "title": "Seamallowancemm",
+      "type": "number"
+    },
+    "sourceSha256": {
+      "title": "Sourcesha256",
+      "type": "string"
+    },
+    "stages": {
+      "items": {
+        "$ref": "#/$defs/StageReport"
+      },
+      "title": "Stages",
+      "type": "array"
+    },
+    "svgFileName": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Svgfilename"
+    },
+    "targetHeightMm": {
+      "exclusiveMinimum": 0,
+      "title": "Targetheightmm",
+      "type": "number"
+    },
+    "units": {
+      "const": "mm",
+      "default": "mm",
+      "title": "Units",
+      "type": "string"
+    }
+  },
+  "required": [
+    "sourceSha256",
+    "targetHeightMm",
+    "seamAllowanceMm",
+    "pieces",
+    "quality",
+    "stages"
+  ],
+  "title": "PatternPipelineReport",
+  "type": "object"
+}

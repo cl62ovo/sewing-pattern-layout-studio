@@ -51,6 +51,12 @@
         "MESH_NOT_CLOSED",
         "MESH_NON_MANIFOLD",
         "MESH_REPAIR_FAILED",
+        "SEGMENTATION_NO_VALID_CUT",
+        "FLATTENING_FLIPPED_TRIANGLES",
+        "FLATTENING_DISTORTION_TOO_HIGH",
+        "SEAM_LENGTH_MISMATCH",
+        "SEAM_ALLOWANCE_OFFSET_FAILED",
+        "PDF_VALIDATION_FAILED",
         "NOT_IMPLEMENTED"
       ],
       "title": "ErrorCode",
@@ -167,8 +173,8 @@
   "additionalProperties": false,
   "properties": {
     "algorithmVersion": {
-      "const": "normalize-v2",
-      "default": "normalize-v2",
+      "const": "normalize-v3",
+      "default": "normalize-v3",
       "title": "Algorithmversion",
       "type": "string"
     },

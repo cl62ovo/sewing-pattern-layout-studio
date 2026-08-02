@@ -6,7 +6,9 @@ from pathlib import Path
 from uuid import UUID
 
 from plush_pattern_studio.contracts.generation import MeshyTaskStatus
+from plush_pattern_studio.contracts.pipeline import ErrorCode
 from plush_pattern_studio.geometry.normalize import normalize_glb
+from plush_pattern_studio.geometry.pattern import PatternBuildError, build_pattern
 from plush_pattern_studio.infrastructure.database import Database
 from plush_pattern_studio.infrastructure.migrate import migrate
 from plush_pattern_studio.infrastructure.object_storage import LocalObjectStorage
@@ -18,12 +20,82 @@ from plush_pattern_studio.settings import Settings, get_settings
 AMBIGUOUS_TERMINAL_POLL_LIMIT = 24
 
 
+async def _process_pattern_job(
+    repository: ProjectRepository,
+    job: dict[str, object],
+) -> bool:
+    job_id = UUID(str(job["id"]))
+    version_id = UUID(str(job["version_id"]))
+    if job["state"] == "queued":
+        await repository.mark_pattern_job_started(job_id)
+        return True
+    try:
+        version = await repository.get_project_for_version(version_id)
+        normalized_asset = next(
+            asset
+            for asset in await repository.get_assets(version_id)
+            if asset["kind"] == "normalized_glb"
+        )
+        normalized_path = repository.storage.path_for(normalized_asset["storage_key"])
+        with tempfile.TemporaryDirectory(prefix="plush-pattern-build-") as temporary:
+            output_directory = Path(temporary)
+            report = build_pattern(
+                normalized_path,
+                target_height_mm=version["heightMm"],
+                seam_allowance_mm=version["seamAllowanceMm"],
+                output_directory=output_directory,
+            )
+            payload = report.model_dump(mode="json", by_alias=True)
+            await repository.add_json_asset(version_id, "pattern_report", payload)
+            await repository.add_asset(
+                version_id,
+                "pattern_svg",
+                f"versions/{version_id}/pattern.svg",
+                "image/svg+xml",
+                (output_directory / "pattern.svg").read_bytes(),
+                {"experimental": True, "passed": report.quality.passed},
+            )
+            if report.pdf_file_name is not None:
+                await repository.add_asset(
+                    version_id,
+                    "pattern_pdf",
+                    f"versions/{version_id}/pattern.pdf",
+                    "application/pdf",
+                    (output_directory / report.pdf_file_name).read_bytes(),
+                    {"experimental": True, "passed": True, "scale": "1:1"},
+                )
+            await repository.save_pattern_run(version_id, payload["quality"])
+        await repository.finish_pattern_job(
+            job_id,
+            version_id,
+            computed=True,
+            pattern_passed=report.quality.passed,
+            error_code=(
+                None
+                if report.quality.passed
+                else str(report.quality.failure_reasons[0])
+            ),
+        )
+    except (PatternBuildError, LookupError, StopIteration, ValueError) as error:
+        code = error.code if isinstance(error, PatternBuildError) else ErrorCode.PROVIDER_ASSET_INVALID
+        await repository.finish_pattern_job(
+            job_id,
+            version_id,
+            computed=False,
+            error_code=str(code),
+        )
+    return True
+
+
 async def process_once(settings: Settings, meshy: MeshyClient | None = None) -> bool:
     database = Database(settings.database_url)
     storage = LocalObjectStorage(settings.object_storage_path)
     repository = ProjectRepository(database, storage)
     try:
         await migrate(database)
+        pattern_job = await repository.next_pattern_job()
+        if pattern_job is not None:
+            return await _process_pattern_job(repository, pattern_job)
         job = await repository.next_model_job()
         if job is None:
             return False

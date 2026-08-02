@@ -60,11 +60,13 @@ export function App() {
         aria-labelledby="layout-tab"
         hidden={activeTab !== 'layout'}
       >
-        <iframe
-          className="legacy-frame"
-          src="/legacy/index.html"
-          title="Nest & Cut fabric layout"
-        />
+        {activeTab === 'layout' && (
+          <iframe
+            className="legacy-frame"
+            src="/legacy/index.html"
+            title="Nest & Cut fabric layout"
+          />
+        )}
       </section>
     </div>
   )

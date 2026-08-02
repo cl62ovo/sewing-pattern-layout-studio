@@ -187,4 +187,43 @@ def test_local_project_to_normalized_model(tmp_path: Path) -> None:
         assert asset_response.status_code == 200
         assert asset_response.content[:4] == b"glTF"
 
+        pattern_endpoint = f"/api/versions/{project['version']['id']}/accept-model"
+        first_pattern_job = client.post(
+            pattern_endpoint,
+            json={"idempotencyKey": "pattern-request-123"},
+        )
+        second_pattern_job = client.post(
+            pattern_endpoint,
+            json={"idempotencyKey": "pattern-request-123"},
+        )
+        assert first_pattern_job.status_code == 202
+        assert first_pattern_job.json()["id"] == second_pattern_job.json()["id"]
+
+        assert asyncio.run(process_once(settings, meshy)) is True
+        pattern_running = client.get(
+            f"/api/jobs/{first_pattern_job.json()['id']}"
+        ).json()
+        assert pattern_running["state"] == "running"
+        assert pattern_running["kind"] == "build_pattern"
+        assert asyncio.run(process_once(settings, meshy)) is True
+
+        finished_project = client.get(f"/api/projects/{project['id']}").json()
+        assert finished_project["version"]["status"] == "ready"
+        pattern_assets = {
+            asset["kind"]: asset for asset in finished_project["version"]["assets"]
+        }
+        assert {"pattern_report", "pattern_svg", "pattern_pdf"} <= set(pattern_assets)
+        quality = client.get(
+            f"/api/versions/{project['version']['id']}/quality-report"
+        ).json()
+        assert quality["passed"] is True
+        assert quality["pieceCount"] <= 12
+        pattern = client.get(
+            f"/api/versions/{project['version']['id']}/pattern"
+        ).json()
+        assert pattern["algorithmVersion"] == "pattern-v3"
+        pdf_response = client.get(pattern_assets["pattern_pdf"]["url"])
+        assert pdf_response.status_code == 200
+        assert pdf_response.content.startswith(b"%PDF-")
+
     assert len(meshy.created_prompts) == 1

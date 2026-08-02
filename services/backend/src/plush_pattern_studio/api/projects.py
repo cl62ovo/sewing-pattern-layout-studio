@@ -4,7 +4,11 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 
-from plush_pattern_studio.api.models import CreateModelJobRequest, CreateProjectRequest
+from plush_pattern_studio.api.models import (
+    CreateModelJobRequest,
+    CreatePatternJobRequest,
+    CreateProjectRequest,
+)
 from plush_pattern_studio.contracts.generation import MeshyPrompt, PlushSpecification
 from plush_pattern_studio.infrastructure.repository import ProjectRepository
 from plush_pattern_studio.providers.errors import ProviderError
@@ -105,6 +109,48 @@ def create_projects_router(
             return await repository.create_model_job(version_id, request.idempotencyKey)
         except LookupError as error:
             raise HTTPException(404, detail={"code": "VERSION_NOT_FOUND"}) from error
+
+    async def enqueue_pattern_job(
+        version_id: UUID,
+        request: CreatePatternJobRequest,
+    ) -> dict[str, object]:
+        try:
+            return await repository.create_pattern_job(version_id, request.idempotencyKey)
+        except LookupError as error:
+            raise HTTPException(404, detail={"code": "VERSION_NOT_FOUND"}) from error
+        except ValueError as error:
+            raise HTTPException(409, detail={"code": "MODEL_NOT_READY"}) from error
+
+    router.add_api_route(
+        "/versions/{version_id}/accept-model",
+        enqueue_pattern_job,
+        methods=["POST"],
+        status_code=202,
+    )
+    router.add_api_route(
+        "/versions/{version_id}/pattern-jobs",
+        enqueue_pattern_job,
+        methods=["POST"],
+        status_code=202,
+    )
+
+    @router.get("/versions/{version_id}/pattern")
+    async def get_pattern(version_id: UUID) -> dict[str, object]:
+        payload = repository._read_json_kind(
+            await repository.get_assets(version_id), "pattern_report"
+        )
+        if payload is None:
+            raise HTTPException(404, detail={"code": "PATTERN_NOT_FOUND"})
+        return payload
+
+    @router.get("/versions/{version_id}/quality-report")
+    async def get_quality_report(version_id: UUID) -> dict[str, object]:
+        payload = repository._read_json_kind(
+            await repository.get_assets(version_id), "pattern_report"
+        )
+        if payload is None:
+            raise HTTPException(404, detail={"code": "PATTERN_NOT_FOUND"})
+        return payload["quality"]
 
     @router.get("/jobs/{job_id}")
     async def get_job(job_id: UUID) -> dict[str, object]:

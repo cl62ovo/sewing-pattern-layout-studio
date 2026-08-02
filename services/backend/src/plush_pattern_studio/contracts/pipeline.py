@@ -36,6 +36,12 @@ class ErrorCode(StrEnum):
     MESH_NOT_CLOSED = "MESH_NOT_CLOSED"
     MESH_NON_MANIFOLD = "MESH_NON_MANIFOLD"
     MESH_REPAIR_FAILED = "MESH_REPAIR_FAILED"
+    SEGMENTATION_NO_VALID_CUT = "SEGMENTATION_NO_VALID_CUT"
+    FLATTENING_FLIPPED_TRIANGLES = "FLATTENING_FLIPPED_TRIANGLES"
+    FLATTENING_DISTORTION_TOO_HIGH = "FLATTENING_DISTORTION_TOO_HIGH"
+    SEAM_LENGTH_MISMATCH = "SEAM_LENGTH_MISMATCH"
+    SEAM_ALLOWANCE_OFFSET_FAILED = "SEAM_ALLOWANCE_OFFSET_FAILED"
+    PDF_VALIDATION_FAILED = "PDF_VALIDATION_FAILED"
     NOT_IMPLEMENTED = "NOT_IMPLEMENTED"
 
 
@@ -64,7 +70,7 @@ class StageReport(ContractModel):
 
 class GeometryPipelineReport(ContractModel):
     schema_version: Literal[1] = 1
-    algorithm_version: Literal["normalize-v2"] = "normalize-v2"
+    algorithm_version: Literal["normalize-v3"] = "normalize-v3"
     units: Literal["mm"] = "mm"
     source_file_name: str
     source_sha256: str
@@ -76,3 +82,51 @@ class GeometryPipelineReport(ContractModel):
     repair_method: Literal["none", "topology_cleanup", "voxel_reconstruction"]
     voxel_resolution: int | None = Field(default=None, ge=32)
     stages: list[StageReport]
+
+
+class SeamEdge(ContractModel):
+    id: str
+    pair_id: str
+    source_vertices: tuple[int, int]
+    length_3d_mm: float = Field(ge=0)
+    length_2d_mm: float = Field(ge=0)
+
+
+class PatternPiece(ContractModel):
+    id: str
+    name: str
+    quantity: int = Field(default=1, ge=1)
+    mirror_of: str | None = None
+    grain_direction: tuple[float, float] = (0.0, 1.0)
+    source_vertex_ids: list[int]
+    faces: list[tuple[int, int, int]]
+    vertices_2d_mm: list[tuple[float, float]]
+    seam_path_mm: list[tuple[float, float]]
+    cut_path_mm: list[tuple[float, float]]
+    seam_edges: list[SeamEdge]
+
+
+class PatternQuality(ContractModel):
+    piece_count: int = Field(ge=0)
+    mean_distortion: float = Field(ge=0)
+    max_distortion: float = Field(ge=0)
+    max_seam_mismatch: float = Field(ge=0)
+    flipped_triangle_count: int = Field(ge=0)
+    boundary_self_intersection_count: int = Field(ge=0)
+    unpaired_seam_count: int = Field(ge=0)
+    passed: bool
+    failure_reasons: list[ErrorCode]
+
+
+class PatternPipelineReport(ContractModel):
+    schema_version: Literal[1] = 1
+    algorithm_version: Literal["pattern-v3"] = "pattern-v3"
+    units: Literal["mm"] = "mm"
+    source_sha256: str
+    target_height_mm: float = Field(gt=0)
+    seam_allowance_mm: float = Field(ge=0)
+    pieces: list[PatternPiece]
+    quality: PatternQuality
+    stages: list[StageReport]
+    svg_file_name: str | None = None
+    pdf_file_name: str | None = None

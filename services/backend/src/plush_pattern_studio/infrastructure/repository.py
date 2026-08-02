@@ -11,7 +11,14 @@ from sqlalchemy import and_, insert, select, update
 from plush_pattern_studio.contracts.generation import MeshyPrompt, PlushSpecification
 from plush_pattern_studio.infrastructure.database import Database
 from plush_pattern_studio.infrastructure.object_storage import LocalObjectStorage
-from plush_pattern_studio.infrastructure.schema import assets, jobs, project_versions, projects, users
+from plush_pattern_studio.infrastructure.schema import (
+    assets,
+    jobs,
+    pattern_runs,
+    project_versions,
+    projects,
+    users,
+)
 
 LOCAL_USER_ID = UUID("00000000-0000-0000-0000-000000000001")
 
@@ -77,7 +84,7 @@ class ProjectRepository:
                     height_mm=Decimal(str(height_mm)),
                     seam_allowance_mm=Decimal(str(seam_allowance_mm)),
                     material_preset="low_stretch_short_plush",
-                    algorithm_version="normalize-v2",
+                    algorithm_version="normalize-v3",
                     prompt_version="p01-v1+p02-v1",
                     created_at=now,
                     updated_at=now,
@@ -192,7 +199,7 @@ class ProjectRepository:
 
         version_id = row[project_versions.c.id]
         version_assets = await self.get_assets(version_id)
-        latest_job = await self.get_latest_model_job(version_id)
+        latest_job = await self.get_latest_job(version_id)
         return {
             "id": str(row[projects.c.id]),
             "name": row[projects.c.name],
@@ -218,6 +225,7 @@ class ProjectRepository:
                     select(
                         project_versions.c.project_id,
                         project_versions.c.height_mm,
+                        project_versions.c.seam_allowance_mm,
                     ).where(project_versions.c.id == version_id)
                 )
             ).mappings().first()
@@ -226,6 +234,7 @@ class ProjectRepository:
         return {
             "projectId": str(row["project_id"]),
             "heightMm": float(row["height_mm"]),
+            "seamAllowanceMm": float(row["seam_allowance_mm"]),
         }
 
     async def get_assets(self, version_id: UUID) -> list[dict[str, Any]]:
@@ -311,6 +320,70 @@ class ProjectRepository:
             )
         return await self.get_job(job_id) or {}
 
+    async def create_pattern_job(
+        self,
+        version_id: UUID,
+        idempotency_key: str,
+    ) -> dict[str, Any]:
+        async with self.database.engine.begin() as connection:
+            version = (
+                await connection.execute(
+                    select(project_versions.c.status).where(
+                        project_versions.c.id == version_id
+                    )
+                )
+            ).mappings().first()
+            if version is None:
+                raise LookupError("version")
+            existing = (
+                await connection.execute(
+                    select(jobs).where(
+                        and_(
+                            jobs.c.version_id == version_id,
+                            jobs.c.kind == "build_pattern",
+                            jobs.c.idempotency_key == idempotency_key,
+                        )
+                    )
+                )
+            ).mappings().first()
+            if existing:
+                return self._public_job(dict(existing))
+            normalized_exists = await connection.scalar(
+                select(assets.c.id).where(
+                    and_(
+                        assets.c.version_id == version_id,
+                        assets.c.kind == "normalized_glb",
+                    )
+                )
+            )
+            if normalized_exists is None or version["status"] not in {
+                "model_review",
+                "pattern_review",
+                "ready",
+            }:
+                raise ValueError("model is not ready")
+            job_id = uuid4()
+            await connection.execute(
+                insert(jobs).values(
+                    id=job_id,
+                    version_id=version_id,
+                    kind="build_pattern",
+                    state="queued",
+                    stage="segmenting",
+                    idempotency_key=idempotency_key,
+                    attempt=1,
+                    started_at=utc_now(),
+                    progress_message_key="pattern.queued",
+                    error_details={"progress": 0},
+                )
+            )
+            await connection.execute(
+                update(project_versions)
+                .where(project_versions.c.id == version_id)
+                .values(status="segmenting", updated_at=utc_now())
+            )
+        return await self.get_job(job_id) or {}
+
     async def get_job(self, job_id: UUID) -> dict[str, Any] | None:
         async with self.database.engine.connect() as connection:
             row = (
@@ -335,12 +408,25 @@ class ProjectRepository:
             ).mappings().first()
         return dict(row) if row else None
 
+    async def get_latest_job(self, version_id: UUID) -> dict[str, Any] | None:
+        async with self.database.engine.connect() as connection:
+            row = (
+                await connection.execute(
+                    select(jobs)
+                    .where(jobs.c.version_id == version_id)
+                    .order_by(jobs.c.started_at.desc(), jobs.c.id.desc())
+                    .limit(1)
+                )
+            ).mappings().first()
+        return dict(row) if row else None
+
     @staticmethod
     def _public_job(job: dict[str, Any]) -> dict[str, Any]:
         details = job.get("error_details") or {}
         return {
             "id": str(job["id"]),
             "versionId": str(job["version_id"]),
+            "kind": job["kind"],
             "state": job["state"],
             "stage": job["stage"],
             "progress": details.get("progress", 0),
@@ -349,6 +435,7 @@ class ProjectRepository:
             "errorCode": job.get("error_code"),
             "errorMessage": details.get("errorMessage"),
             "providerStatus": details.get("providerStatus"),
+            "patternPassed": details.get("patternPassed"),
         }
 
     async def resume_model_job(self, job_id: UUID) -> dict[str, Any]:
@@ -402,6 +489,105 @@ class ProjectRepository:
         async with self.database.engine.connect() as connection:
             row = (await connection.execute(query)).mappings().first()
         return dict(row) if row else None
+
+    async def next_pattern_job(self) -> dict[str, Any] | None:
+        query = (
+            select(jobs)
+            .where(
+                and_(
+                    jobs.c.kind == "build_pattern",
+                    jobs.c.state.in_(["queued", "running"]),
+                )
+            )
+            .order_by(jobs.c.started_at.asc(), jobs.c.id.asc())
+            .limit(1)
+        )
+        async with self.database.engine.connect() as connection:
+            row = (await connection.execute(query)).mappings().first()
+        return dict(row) if row else None
+
+    async def mark_pattern_job_started(self, job_id: UUID) -> None:
+        async with self.database.engine.begin() as connection:
+            await connection.execute(
+                update(jobs)
+                .where(jobs.c.id == job_id)
+                .values(
+                    state="running",
+                    stage="segmenting",
+                    started_at=utc_now(),
+                    heartbeat_at=utc_now(),
+                    progress_message_key="pattern.segmenting",
+                    error_details={"progress": 20},
+                )
+            )
+
+    async def save_pattern_run(
+        self,
+        version_id: UUID,
+        quality: dict[str, Any],
+    ) -> None:
+        async with self.database.engine.begin() as connection:
+            attempt = int(
+                await connection.scalar(
+                    select(pattern_runs.c.attempt)
+                    .where(pattern_runs.c.version_id == version_id)
+                    .order_by(pattern_runs.c.attempt.desc())
+                    .limit(1)
+                )
+                or 0
+            ) + 1
+            await connection.execute(
+                insert(pattern_runs).values(
+                    id=uuid4(),
+                    version_id=version_id,
+                    attempt=attempt,
+                    piece_count=quality["pieceCount"],
+                    mean_distortion=Decimal(str(quality["meanDistortion"])),
+                    max_distortion=Decimal(str(quality["maxDistortion"])),
+                    max_seam_mismatch=Decimal(str(quality["maxSeamMismatch"])),
+                    flipped_triangle_count=quality["flippedTriangleCount"],
+                    passed=quality["passed"],
+                    failure_reasons=quality["failureReasons"],
+                    metrics=quality,
+                )
+            )
+
+    async def finish_pattern_job(
+        self,
+        job_id: UUID,
+        version_id: UUID,
+        *,
+        computed: bool,
+        pattern_passed: bool = False,
+        error_code: str | None = None,
+    ) -> None:
+        now = utc_now()
+        async with self.database.engine.begin() as connection:
+            await connection.execute(
+                update(jobs)
+                .where(jobs.c.id == job_id)
+                .values(
+                    state="succeeded" if computed else "failed",
+                    stage="ready" if pattern_passed else ("pattern_review" if computed else "failed"),
+                    error_code=error_code,
+                    error_details={
+                        "progress": 100 if computed else 0,
+                        "patternPassed": pattern_passed,
+                    },
+                    finished_at=now,
+                    heartbeat_at=now,
+                    progress_message_key="pattern.ready" if pattern_passed else "pattern.review",
+                )
+            )
+            await connection.execute(
+                update(project_versions)
+                .where(project_versions.c.id == version_id)
+                .values(
+                    status="ready" if pattern_passed else ("pattern_review" if computed else "failed"),
+                    algorithm_version="pattern-v3" if computed else project_versions.c.algorithm_version,
+                    updated_at=now,
+                )
+            )
 
     async def get_meshy_prompt(self, version_id: UUID) -> MeshyPrompt:
         prompt_asset = next(

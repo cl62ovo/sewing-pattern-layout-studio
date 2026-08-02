@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "exports": {
-    "./geometry-pipeline.schema.json": "./geometry-pipeline.schema.json"
+    "./geometry-pipeline.schema.json": "./geometry-pipeline.schema.json",
+    "./pattern-pipeline.schema.json": "./pattern-pipeline.schema.json"
   }
 }
