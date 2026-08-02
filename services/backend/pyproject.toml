@@ -1,0 +1,40 @@
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "plush-pattern-studio"
+version = "0.1.0"
+description = "API, worker, and deterministic geometry tools for Plush Pattern Studio."
+requires-python = ">=3.11"
+dependencies = [
+    "aiosqlite>=0.21,<1",
+    "asyncpg>=0.30,<1",
+    "fastapi>=0.116,<1",
+    "httpx>=0.28,<1",
+    "numpy>=2.2,<2.3",
+    "pydantic-settings>=2.10,<3",
+    "scikit-image>=0.25,<0.26",
+    "sqlalchemy[asyncio]>=2.0,<3",
+    "trimesh>=4.7,<5",
+    "uvicorn[standard]>=0.35,<1",
+]
+
+[project.scripts]
+plush-db = "plush_pattern_studio.infrastructure.migrate:main"
+plush-geometry = "plush_pattern_studio.geometry.cli:main"
+plush-worker = "plush_pattern_studio.worker.main:main"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.4,<9",
+    "pytest-asyncio>=1.1,<2",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/plush_pattern_studio"]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+asyncio_mode = "auto"
+testpaths = ["tests"]

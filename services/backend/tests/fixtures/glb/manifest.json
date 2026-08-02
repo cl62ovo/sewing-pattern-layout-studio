@@ -1,0 +1,17 @@
+{
+  "long-ears.glb": {
+    "faceCount": 5120,
+    "sha256": "c09f66edb8cfdf251ad090c2ff7784aae1eaba00e3232bb11b7c73a308febe95",
+    "vertexCount": 2562
+  },
+  "rounded-body.glb": {
+    "faceCount": 1280,
+    "sha256": "40e441d78d7c2a7ba5ae43d5efcf49d8da6dbc877cd4193e4528a79b875d57af",
+    "vertexCount": 642
+  },
+  "simple-tail.glb": {
+    "faceCount": 5120,
+    "sha256": "f53f25b24e8806ddde237e2bd4c3357b1d68837b5cee4ea102c4fa0111ebc1ef",
+    "vertexCount": 2562
+  }
+}

@@ -1,0 +1,259 @@
+{
+  "$defs": {
+    "Bounds3D": {
+      "additionalProperties": false,
+      "properties": {
+        "maximum": {
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Maximum",
+          "type": "array"
+        },
+        "minimum": {
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Minimum",
+          "type": "array"
+        }
+      },
+      "required": [
+        "minimum",
+        "maximum"
+      ],
+      "title": "Bounds3D",
+      "type": "object"
+    },
+    "ErrorCode": {
+      "enum": [
+        "PROVIDER_ASSET_INVALID",
+        "MESH_NOT_CLOSED",
+        "MESH_NON_MANIFOLD",
+        "MESH_REPAIR_FAILED",
+        "NOT_IMPLEMENTED"
+      ],
+      "title": "ErrorCode",
+      "type": "string"
+    },
+    "MeshDiagnostics": {
+      "additionalProperties": false,
+      "properties": {
+        "boundaryEdgeCount": {
+          "minimum": 0,
+          "title": "Boundaryedgecount",
+          "type": "integer"
+        },
+        "boundsMm": {
+          "$ref": "#/$defs/Bounds3D"
+        },
+        "connectedComponentCount": {
+          "minimum": 0,
+          "title": "Connectedcomponentcount",
+          "type": "integer"
+        },
+        "degenerateFaceCount": {
+          "minimum": 0,
+          "title": "Degeneratefacecount",
+          "type": "integer"
+        },
+        "faceCount": {
+          "minimum": 0,
+          "title": "Facecount",
+          "type": "integer"
+        },
+        "isWatertight": {
+          "title": "Iswatertight",
+          "type": "boolean"
+        },
+        "isWindingConsistent": {
+          "title": "Iswindingconsistent",
+          "type": "boolean"
+        },
+        "nonManifoldEdgeCount": {
+          "minimum": 0,
+          "title": "Nonmanifoldedgecount",
+          "type": "integer"
+        },
+        "vertexCount": {
+          "minimum": 0,
+          "title": "Vertexcount",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "vertexCount",
+        "faceCount",
+        "connectedComponentCount",
+        "boundaryEdgeCount",
+        "nonManifoldEdgeCount",
+        "degenerateFaceCount",
+        "isWatertight",
+        "isWindingConsistent",
+        "boundsMm"
+      ],
+      "title": "MeshDiagnostics",
+      "type": "object"
+    },
+    "PipelineStage": {
+      "enum": [
+        "normalize",
+        "segment",
+        "flatten",
+        "score",
+        "pdf"
+      ],
+      "title": "PipelineStage",
+      "type": "string"
+    },
+    "StageReport": {
+      "additionalProperties": false,
+      "properties": {
+        "errorCode": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ErrorCode"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "stage": {
+          "$ref": "#/$defs/PipelineStage"
+        },
+        "status": {
+          "$ref": "#/$defs/StageStatus"
+        }
+      },
+      "required": [
+        "stage",
+        "status"
+      ],
+      "title": "StageReport",
+      "type": "object"
+    },
+    "StageStatus": {
+      "enum": [
+        "completed",
+        "failed",
+        "not_implemented"
+      ],
+      "title": "StageStatus",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "algorithmVersion": {
+      "const": "normalize-v2",
+      "default": "normalize-v2",
+      "title": "Algorithmversion",
+      "type": "string"
+    },
+    "diagnostics": {
+      "$ref": "#/$defs/MeshDiagnostics"
+    },
+    "inputDiagnostics": {
+      "$ref": "#/$defs/MeshDiagnostics"
+    },
+    "repairMethod": {
+      "enum": [
+        "none",
+        "topology_cleanup",
+        "voxel_reconstruction"
+      ],
+      "title": "Repairmethod",
+      "type": "string"
+    },
+    "scaleFactor": {
+      "exclusiveMinimum": 0,
+      "title": "Scalefactor",
+      "type": "number"
+    },
+    "schemaVersion": {
+      "const": 1,
+      "default": 1,
+      "title": "Schemaversion",
+      "type": "integer"
+    },
+    "sourceByteSize": {
+      "minimum": 0,
+      "title": "Sourcebytesize",
+      "type": "integer"
+    },
+    "sourceFileName": {
+      "title": "Sourcefilename",
+      "type": "string"
+    },
+    "sourceSha256": {
+      "title": "Sourcesha256",
+      "type": "string"
+    },
+    "stages": {
+      "items": {
+        "$ref": "#/$defs/StageReport"
+      },
+      "title": "Stages",
+      "type": "array"
+    },
+    "targetHeightMm": {
+      "exclusiveMinimum": 0,
+      "title": "Targetheightmm",
+      "type": "number"
+    },
+    "units": {
+      "const": "mm",
+      "default": "mm",
+      "title": "Units",
+      "type": "string"
+    },
+    "voxelResolution": {
+      "anyOf": [
+        {
+          "minimum": 32,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Voxelresolution"
+    }
+  },
+  "required": [
+    "sourceFileName",
+    "sourceSha256",
+    "sourceByteSize",
+    "targetHeightMm",
+    "scaleFactor",
+    "inputDiagnostics",
+    "diagnostics",
+    "repairMethod",
+    "stages"
+  ],
+  "title": "GeometryPipelineReport",
+  "type": "object"
+}
