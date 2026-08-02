@@ -12,7 +12,7 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    app_base_url: str = "http://localhost:5173"
+    app_base_url: str = "http://localhost:8001"
     database_url: str = "sqlite+aiosqlite:///./var/plush-pattern-studio.db"
     redis_url: str | None = None
     object_storage_mode: str = "local"

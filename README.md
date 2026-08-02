@@ -28,7 +28,9 @@ npm run dev:api
 npm run dev:worker
 ```
 
-The web app runs at `http://localhost:5173`, the API at `http://localhost:8000`, and API documentation at `http://localhost:8000/docs`.
+The web app runs at `http://localhost:8001`, the API at `http://localhost:8000`, and API documentation at `http://localhost:8000/docs`.
+
+For Windows, run `start-dev.bat` from the repository root to activate the local virtual environment and start the web app, API, and worker together.
 
 ## Geometry CLI
 
