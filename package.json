@@ -10,7 +10,7 @@
     "predev": "npm run legacy:sync && npm run db:migrate",
     "dev": "concurrently --kill-others-on-fail --names WEB,API,WORKER --prefix-colors cyan,green,yellow \"npm:dev:web\" \"npm:dev:api\" \"npm:dev:worker\"",
     "dev:web": "npm --workspace @plush-pattern-studio/web run dev",
-    "dev:api": "python -m uvicorn plush_pattern_studio.api.main:app --reload --app-dir services/backend/src --port 8000",
+    "dev:api": "python -m uvicorn plush_pattern_studio.api.main:app --reload --reload-dir services/backend/src --app-dir services/backend/src --port 8000",
     "dev:worker": "python -m plush_pattern_studio.worker.main",
     "db:migrate": "python -m plush_pattern_studio.infrastructure.migrate migrate",
     "fixtures:generate": "python services/backend/tools/generate_fixtures.py",
